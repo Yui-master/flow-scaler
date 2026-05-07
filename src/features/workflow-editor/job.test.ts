@@ -1,0 +1,114 @@
+﻿import { describe, expect, test } from "vitest";
+
+import { createWorkflowNode } from "./catalog";
+import { createJobLifecycleSteps, validateWorkflowForJobStart } from "./job";
+import type { WorkflowAssetMetadata, WorkflowEdge, WorkflowNode } from "./types";
+
+const videoAsset: WorkflowAssetMetadata = {
+  id: "asset-video",
+  kind: "video",
+  fileName: "source.mp4",
+  mimeType: "video/mp4",
+  size: 1024,
+  previewUrl: "blob:video",
+};
+
+function node(kind: WorkflowNode["data"]["kind"], id: string): WorkflowNode {
+  return createWorkflowNode(kind, id, { x: 0, y: 0 });
+}
+
+function videoWorkflow() {
+  const nodes = [
+    node("loadVideo", "load-video"),
+    node("extractFrames", "extract-frames"),
+    node("realesrganUpscale", "upscale"),
+    node("combineFrames", "combine-frames"),
+    node("exportFile", "export"),
+  ];
+
+  nodes[0].data.params = { asset: videoAsset };
+
+  const edges: WorkflowEdge[] = [
+    { id: "load-to-extract", source: "load-video", target: "extract-frames" },
+    { id: "extract-to-upscale", source: "extract-frames", target: "upscale" },
+    { id: "upscale-to-combine", source: "upscale", target: "combine-frames" },
+    { id: "combine-to-export", source: "combine-frames", target: "export" },
+  ];
+
+  return { nodes, edges };
+}
+
+describe("validateWorkflowForJobStart", () => {
+  test("valid configured video workflow ending in Export File returns valid true", () => {
+    const { nodes, edges } = videoWorkflow();
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({ valid: true });
+  });
+
+  test("missing asset on Load Video returns a validation error", () => {
+    const { nodes, edges } = videoWorkflow();
+    nodes[0].data.params = {};
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
+      valid: false,
+      errors: [
+        {
+          nodeId: "load-video",
+          message: "Load Video needs an uploaded MP4 file.",
+        },
+      ],
+    });
+  });
+
+  test("empty model on RealESRGAN returns a validation error", () => {
+    const { nodes, edges } = videoWorkflow();
+    nodes[2].data.params = { model: "", scale: 4 };
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
+      valid: false,
+      errors: [
+        {
+          nodeId: "upscale",
+          message: "RealESRGAN Upscale needs a model preset.",
+        },
+      ],
+    });
+  });
+
+  test("no connected Export File returns a validation error", () => {
+    const { nodes, edges } = videoWorkflow();
+
+    expect(validateWorkflowForJobStart(nodes, edges.slice(0, -1))).toEqual({
+      valid: false,
+      errors: [
+        {
+          message: "Workflow needs a connected Export File output.",
+        },
+      ],
+    });
+  });
+});
+
+describe("createJobLifecycleSteps", () => {
+  test("creates ordered queued running completed steps for a 5-node video workflow", () => {
+    const { nodes, edges } = videoWorkflow();
+
+    expect(createJobLifecycleSteps(nodes, edges)).toEqual([
+      { nodeId: "load-video", status: "queued", progress: 10 },
+      { nodeId: "load-video", status: "running", progress: 20 },
+      { nodeId: "load-video", status: "completed", progress: 30 },
+      { nodeId: "extract-frames", status: "queued", progress: 40 },
+      { nodeId: "extract-frames", status: "running", progress: 50 },
+      { nodeId: "extract-frames", status: "completed", progress: 60 },
+      { nodeId: "upscale", status: "queued", progress: 70 },
+      { nodeId: "upscale", status: "running", progress: 80 },
+      { nodeId: "upscale", status: "completed", progress: 90 },
+      { nodeId: "combine-frames", status: "queued", progress: 95 },
+      { nodeId: "combine-frames", status: "running", progress: 98 },
+      { nodeId: "combine-frames", status: "completed", progress: 99 },
+      { nodeId: "export", status: "queued", progress: 99 },
+      { nodeId: "export", status: "running", progress: 99 },
+      { nodeId: "export", status: "completed", progress: 100 },
+    ]);
+  });
+});
