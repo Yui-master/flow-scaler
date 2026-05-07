@@ -35,7 +35,7 @@ vi.mock("next-auth/providers/google", () => ({
 }));
 
 vi.mock("next-auth/providers/credentials", () => ({
-  default: vi.fn((config) => ({ id: "credentials", ...config })),
+  default: vi.fn((config: Record<string, unknown>) => ({ id: "credentials", ...config })),
 }));
 
 import { authConfig } from "./config";

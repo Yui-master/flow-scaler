@@ -18,10 +18,14 @@ export function RegisterForm() {
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") ?? "");
-    const username = String(formData.get("username") ?? "");
-    const email = String(formData.get("email") ?? "");
-    const password = String(formData.get("password") ?? "");
+    const nameValue = formData.get("name");
+    const usernameValue = formData.get("username");
+    const emailValue = formData.get("email");
+    const passwordValue = formData.get("password");
+    const name = typeof nameValue === "string" ? nameValue : "";
+    const username = typeof usernameValue === "string" ? usernameValue : "";
+    const email = typeof emailValue === "string" ? emailValue : "";
+    const password = typeof passwordValue === "string" ? passwordValue : "";
 
     const result = await registerUser({ name, username, email, password });
 
