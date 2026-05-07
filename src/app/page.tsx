@@ -1,69 +1,105 @@
 import Link from "next/link";
 
-import { LatestPost } from "~/app/_components/post";
 import { auth } from "~/server/auth";
-import { api, HydrateClient } from "~/trpc/server";
 
 export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
   const session = await auth();
-
-  if (session?.user) {
-    void api.post.getLatest.prefetch();
-  }
+  const isSignedIn = Boolean(session?.user);
 
   return (
-    <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-          </h1>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
+    <main className="min-h-screen overflow-hidden bg-[#0a0a0a] text-white">
+      <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6">
+        <Link href="/" className="text-xl font-black tracking-tight text-[#ffd84d]">
+          FlowScaler
+        </Link>
+        <div className="flex items-center gap-3">
+          {isSignedIn ? (
             <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
+              href="/dashboard"
+              className="rounded-full bg-[#ffd84d] px-5 py-2 text-sm font-bold text-black transition hover:bg-[#ffe680]"
             >
-              <h3 className="text-2xl font-bold">First Steps →</h3>
-              <div className="text-lg">
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-full border border-white/15 px-5 py-2 text-sm font-semibold text-white transition hover:border-[#ffd84d]/60 hover:text-[#ffd84d]"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="rounded-full bg-[#ffd84d] px-5 py-2 text-sm font-bold text-black transition hover:bg-[#ffe680]"
+              >
+                Get started
+              </Link>
+            </>
+          )}
+        </div>
+      </nav>
+
+      <section className="mx-auto grid min-h-[calc(100vh-88px)] w-full max-w-7xl items-center gap-12 px-6 py-16 lg:grid-cols-[1fr_0.9fr]">
+        <div className="max-w-3xl">
+          <p className="mb-5 inline-flex rounded-full border border-[#ffd84d]/30 bg-[#ffd84d]/10 px-4 py-2 text-sm font-semibold text-[#ffd84d]">
+            AI media workflows at browser speed
+          </p>
+          <h1 className="text-5xl font-black leading-tight tracking-[-0.04em] sm:text-7xl">
+            Scale every render, upscale, and delivery workflow from one canvas.
+          </h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-white/70">
+            FlowScaler helps teams compose AI media pipelines, route jobs, and
+            monitor outputs without leaving the browser.
+          </p>
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <Link
+              href={isSignedIn ? "/dashboard" : "/register"}
+              className="rounded-full bg-[#ffd84d] px-8 py-4 text-center text-base font-black text-black shadow-[0_0_40px_rgba(255,216,77,0.25)] transition hover:bg-[#ffe680]"
+            >
+              {isSignedIn ? "Open dashboard" : "Start scaling"}
             </Link>
             <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
+              href="/workflows/editor"
+              className="rounded-full border border-white/15 px-8 py-4 text-center text-base font-bold text-white transition hover:border-[#ffd84d]/60 hover:text-[#ffd84d]"
             >
-              <h3 className="text-2xl font-bold">Documentation →</h3>
-              <div className="text-lg">
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
+              Preview workflow editor
             </Link>
           </div>
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
+        </div>
 
-            <div className="flex flex-col items-center justify-center gap-4">
-              <p className="text-center text-2xl text-white">
-                {session && <span>Logged in as {session.user?.name}</span>}
-              </p>
-              <Link
-                href={session ? "/api/auth/signout" : "/api/auth/signin"}
-                className="rounded-full bg-white/10 px-10 py-3 font-semibold no-underline transition hover:bg-white/20"
-              >
-                {session ? "Sign out" : "Sign in"}
-              </Link>
+        <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 shadow-2xl shadow-black/50">
+          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#ffd84d]/20 blur-3xl" />
+          <div className="relative rounded-[1.5rem] border border-white/10 bg-[#101010] p-5">
+            <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
+              <span className="text-sm font-bold text-white/70">Workflow mockup</span>
+              <span className="rounded-full bg-[#ffd84d]/15 px-3 py-1 text-xs font-bold text-[#ffd84d]">
+                Ready
+              </span>
+            </div>
+            <div className="space-y-4">
+              {[
+                ["Upload source", "4K interview footage"],
+                ["Enhance", "AI upscale + denoise"],
+                ["Generate variants", "Social crops + previews"],
+                ["Deliver", "Queue exports to storage"],
+              ].map(([title, detail], index) => (
+                <div
+                  key={title}
+                  className="grid grid-cols-[2.5rem_1fr] items-center gap-4 rounded-2xl border border-white/10 bg-black/40 p-4"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffd84d] font-black text-black">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-white">{title}</h2>
+                    <p className="text-sm text-white/55">{detail}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-
-          {session?.user && <LatestPost />}
         </div>
-      </main>
-    </HydrateClient>
+      </section>
+    </main>
   );
 }
