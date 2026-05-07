@@ -103,3 +103,30 @@ describe("credentials provider", () => {
     ).resolves.toBeNull();
   });
 });
+
+describe("auth sessions", () => {
+  it("uses JWT sessions", () => {
+    expect(authConfig.session?.strategy).toBe("jwt");
+  });
+
+  it("copies token subject to session user id", async () => {
+    const session = {
+      user: { name: "Yui", email: "yui@example.com", image: null },
+      expires: "2099-01-01T00:00:00.000Z",
+    };
+
+    expect(
+      authConfig.callbacks?.session?.({
+        session,
+        token: { sub: "user_1" },
+      } as Parameters<NonNullable<typeof authConfig.callbacks.session>>[0]),
+    ).toMatchObject({
+      user: {
+        id: "user_1",
+        name: "Yui",
+        email: "yui@example.com",
+        image: null,
+      },
+    });
+  });
+});

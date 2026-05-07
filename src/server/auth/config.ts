@@ -78,14 +78,14 @@ export const authConfig = {
     }),
   ],
   adapter: PrismaAdapter(db),
-  session: { strategy: "database" },
+  session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   callbacks: {
-    session: ({ session, user }) => ({
+    session: ({ session, token }) => ({
       ...session,
       user: {
         ...session.user,
-        id: user.id,
+        id: token.sub ?? "",
       },
     }),
   },
