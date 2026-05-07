@@ -43,13 +43,18 @@ export type WorkflowAssetMetadata = {
   previewUrl: string;
 };
 
-export type WorkflowNodeParams = {
-  asset?: WorkflowAssetMetadata;
-  model?: string;
-  scale?: number;
-  outputName?: string;
-  errorMessage?: string;
+export type WorkflowNodeParamsByKind = {
+  loadImage: { asset?: WorkflowAssetMetadata; errorMessage?: string };
+  loadVideo: { asset?: WorkflowAssetMetadata; errorMessage?: string };
+  extractFrames: { errorMessage?: string };
+  realesrganUpscale: { model: string; scale: number; errorMessage?: string };
+  frameSequenceProcessor: { errorMessage?: string };
+  combineFrames: { errorMessage?: string };
+  exportFile: { outputName: string; errorMessage?: string };
+  preview: { errorMessage?: string };
 };
+
+export type WorkflowNodeParams = WorkflowNodeParamsByKind[WorkflowNodeKind];
 
 export type WorkflowJobStatus = "idle" | "queued" | "running" | "completed" | "failed";
 

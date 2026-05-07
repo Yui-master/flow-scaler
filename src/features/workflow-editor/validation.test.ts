@@ -24,52 +24,24 @@ describe("validateWorkflowConnection", () => {
     ).toEqual({ valid: true });
   });
 
-  it("accepts the required video-first chain", () => {
-    expect(
-      validateWorkflowConnection(
-        { source: "load-video", target: "extract-frames" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
-    expect(
-      validateWorkflowConnection(
-        { source: "extract-frames", target: "upscale" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
-    expect(
-      validateWorkflowConnection(
-        { source: "upscale", target: "combine-frames" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
-    expect(
-      validateWorkflowConnection(
-        { source: "combine-frames", target: "export" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
+  it.each([
+    ["load-video", "extract-frames"],
+    ["extract-frames", "upscale"],
+    ["upscale", "combine-frames"],
+    ["combine-frames", "export"],
+  ])("accepts required video-first chain edge %s -> %s", (source, target) => {
+    expect(validateWorkflowConnection({ source, target }, nodes, [])).toEqual({
+      valid: true,
+    });
   });
 
-  it("accepts the image upscale path", () => {
-    expect(
-      validateWorkflowConnection(
-        { source: "load-image", target: "upscale" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
-    expect(
-      validateWorkflowConnection(
-        { source: "upscale", target: "export" },
-        nodes,
-        [],
-      ),
-    ).toEqual({ valid: true });
+  it.each([
+    ["load-image", "upscale"],
+    ["upscale", "export"],
+  ])("accepts image upscale path edge %s -> %s", (source, target) => {
+    expect(validateWorkflowConnection({ source, target }, nodes, [])).toEqual({
+      valid: true,
+    });
   });
 
   it("rejects incompatible source and target data types", () => {
