@@ -32,6 +32,39 @@ export type WorkflowNodeStatus =
   | "completed"
   | "failed";
 
+export type WorkflowAssetKind = "image" | "video";
+
+export type WorkflowAssetMetadata = {
+  id: string;
+  kind: WorkflowAssetKind;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  previewUrl: string;
+};
+
+export type WorkflowNodeParams = {
+  asset?: WorkflowAssetMetadata;
+  model?: string;
+  scale?: number;
+  outputName?: string;
+  errorMessage?: string;
+};
+
+export type WorkflowJobStatus = "idle" | "queued" | "running" | "completed" | "failed";
+
+export type WorkflowJobState = {
+  id: string;
+  status: WorkflowJobStatus;
+  progress: number;
+  errorMessage?: string;
+};
+
+export type WorkflowGraphValidationError = {
+  nodeId?: string;
+  message: string;
+};
+
 export type WorkflowNodeData = {
   label: string;
   kind: WorkflowNodeKind;
@@ -39,7 +72,7 @@ export type WorkflowNodeData = {
   status: WorkflowNodeStatus;
   inputTypes: WorkflowDataType[];
   outputTypes: WorkflowDataType[];
-  params: Record<string, unknown>;
+  params: WorkflowNodeParams;
 };
 
 export type WorkflowNode = Node<WorkflowNodeData, "workflowNode">;
