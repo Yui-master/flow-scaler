@@ -33,13 +33,17 @@ export function validateWorkflowAssetFile(
   return { valid: true, kind };
 }
 
+function createWorkflowAssetId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function createWorkflowAssetMetadata(
   file: File,
   kind: WorkflowAssetKind,
   previewUrl: string | null,
 ): WorkflowAssetMetadata {
   return {
-    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: createWorkflowAssetId(),
     kind,
     fileName: file.name,
     mimeType: file.type,

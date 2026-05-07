@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { MAX_UPLOAD_SIZE_BYTES, validateWorkflowAssetFile } from "./media";
 
 function createFile(size: number, name: string, type: string): File {
-  return new File([new Uint8Array(size)], name, { type });
+  const file = new File([], name, { type });
+  Object.defineProperty(file, "size", { value: size });
+
+  return file;
 }
 
 describe("validateWorkflowAssetFile", () => {
