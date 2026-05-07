@@ -2,6 +2,7 @@
   WorkflowEdge,
   WorkflowGraphValidationError,
   WorkflowNode,
+  WorkflowNodeParamsByKind,
   WorkflowNodeStatus,
 } from "./types";
 import { validateWorkflowConnection } from "./validation";
@@ -22,6 +23,89 @@ const lifecycleStatuses: WorkflowJobLifecycleStep["status"][] = [
   "running",
   "completed",
 ];
+const dagErrorMessage = "Workflow graph must be a DAG.";
+const missingEndpointErrorMessage = "Workflow contains an edge with a missing node.";
+
+type GraphAnalysis = {
+  orderedIds: string[];
+  reachableIds: Set<string>;
+};
+
+function analyzeWorkflowGraph(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): GraphAnalysis {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const incoming = new Map(nodes.map((node) => [node.id, new Set<string>()]));
+  const outgoing = new Map(nodes.map((node) => [node.id, new Set<string>()]));
+
+  for (const edge of edges) {
+    if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) {
+      throw new Error(missingEndpointErrorMessage);
+    }
+
+    outgoing.get(edge.source)!.add(edge.target);
+    incoming.get(edge.target)!.add(edge.source);
+  }
+
+  const incomingCount = new Map(
+    nodes.map((node) => [node.id, incoming.get(node.id)?.size ?? 0]),
+  );
+  const queue = nodes
+    .filter((node) => (incomingCount.get(node.id) ?? 0) === 0)
+    .map((node) => node.id);
+  const allOrderedIds: string[] = [];
+  const orderedSet = new Set<string>();
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const nodeId = queue[index]!;
+    if (orderedSet.has(nodeId)) {
+      continue;
+    }
+
+    allOrderedIds.push(nodeId);
+    orderedSet.add(nodeId);
+
+    for (const targetId of outgoing.get(nodeId) ?? []) {
+      const nextIncomingCount = (incomingCount.get(targetId) ?? 0) - 1;
+      incomingCount.set(targetId, nextIncomingCount);
+      if (nextIncomingCount === 0) {
+        queue.push(targetId);
+      }
+    }
+  }
+
+  if (allOrderedIds.length !== nodes.length) {
+    throw new Error(dagErrorMessage);
+  }
+
+  const exportIds = nodes
+    .filter(
+      (node) =>
+        node.data.kind === "exportFile" && (incoming.get(node.id)?.size ?? 0) > 0,
+    )
+    .map((node) => node.id);
+  const reachableIds = new Set<string>();
+  const reverseQueue = [...exportIds];
+
+  for (let index = 0; index < reverseQueue.length; index += 1) {
+    const nodeId = reverseQueue[index]!;
+    if (reachableIds.has(nodeId)) {
+      continue;
+    }
+
+    reachableIds.add(nodeId);
+
+    for (const sourceId of incoming.get(nodeId) ?? []) {
+      reverseQueue.push(sourceId);
+    }
+  }
+
+  return {
+    orderedIds: allOrderedIds.filter((nodeId) => reachableIds.has(nodeId)),
+    reachableIds,
+  };
+}
 
 export function validateWorkflowForJobStart(
   nodes: WorkflowNode[],
@@ -30,36 +114,42 @@ export function validateWorkflowForJobStart(
   const errors: WorkflowGraphValidationError[] = [];
 
   for (const node of nodes) {
-    if (node.data.kind === "loadVideo") {
-      const asset = node.data.params.asset;
-      if (asset?.kind !== "video" || asset.mimeType !== "video/mp4") {
-        errors.push({
-          nodeId: node.id,
-          message: "Load Video needs an uploaded MP4 file.",
-        });
+    switch (node.data.kind) {
+      case "loadVideo": {
+        const params = node.data.params as WorkflowNodeParamsByKind["loadVideo"];
+        const asset = params.asset;
+        if (asset?.kind !== "video" || asset.mimeType !== "video/mp4") {
+          errors.push({
+            nodeId: node.id,
+            message: "Load Video needs an uploaded MP4 file.",
+          });
+        }
+        break;
       }
-    }
-
-    if (node.data.kind === "loadImage") {
-      const asset = node.data.params.asset;
-      if (
-        asset?.kind !== "image" ||
-        !["image/png", "image/jpeg"].includes(asset.mimeType)
-      ) {
-        errors.push({
-          nodeId: node.id,
-          message: "Load Image needs an uploaded PNG or JPG file.",
-        });
+      case "loadImage": {
+        const params = node.data.params as WorkflowNodeParamsByKind["loadImage"];
+        const asset = params.asset;
+        if (
+          asset?.kind !== "image" ||
+          !["image/png", "image/jpeg"].includes(asset.mimeType)
+        ) {
+          errors.push({
+            nodeId: node.id,
+            message: "Load Image needs an uploaded PNG or JPG file.",
+          });
+        }
+        break;
       }
-    }
-
-    if (node.data.kind === "realesrganUpscale") {
-      const model = node.data.params.model;
-      if (typeof model !== "string" || model.trim() === "") {
-        errors.push({
-          nodeId: node.id,
-          message: "RealESRGAN Upscale needs a model preset.",
-        });
+      case "realesrganUpscale": {
+        const params = node.data.params as WorkflowNodeParamsByKind["realesrganUpscale"];
+        const model = params.model;
+        if (typeof model !== "string" || model.trim() === "") {
+          errors.push({
+            nodeId: node.id,
+            message: "RealESRGAN Upscale needs a model preset.",
+          });
+        }
+        break;
       }
     }
   }
@@ -74,6 +164,14 @@ export function validateWorkflowForJobStart(
     if (!result.valid) {
       errors.push({ message: result.reason });
     }
+  }
+
+  try {
+    analyzeWorkflowGraph(nodes, edges);
+  } catch (error) {
+    errors.push({
+      message: error instanceof Error ? error.message : dagErrorMessage,
+    });
   }
 
   const hasConnectedExport = nodes.some(
@@ -93,49 +191,19 @@ export function createJobLifecycleSteps(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[],
 ): WorkflowJobLifecycleStep[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const incomingCount = new Map(nodes.map((node) => [node.id, 0]));
-  const outgoing = new Map<string, string[]>();
+  const { orderedIds } = analyzeWorkflowGraph(nodes, edges);
 
-  for (const edge of edges) {
-    incomingCount.set(edge.target, (incomingCount.get(edge.target) ?? 0) + 1);
-    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]);
-  }
-
-  const queue = nodes
-    .filter((node) => (incomingCount.get(node.id) ?? 0) === 0)
-    .map((node) => node.id);
-  const ordered: string[] = [];
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-    if (!nodeById.has(nodeId) || ordered.includes(nodeId)) {
-      continue;
-    }
-
-    ordered.push(nodeId);
-
-    for (const targetId of outgoing.get(nodeId) ?? []) {
-      const nextIncomingCount = (incomingCount.get(targetId) ?? 0) - 1;
-      incomingCount.set(targetId, nextIncomingCount);
-      if (nextIncomingCount === 0) {
-        queue.push(targetId);
-      }
-    }
-  }
-
-  for (const node of nodes) {
-    if (!ordered.includes(node.id)) {
-      ordered.push(node.id);
-    }
-  }
-
-  return ordered.flatMap((nodeId, nodeIndex) =>
+  return orderedIds.flatMap((nodeId, nodeIndex) =>
     lifecycleStatuses.map((status, statusIndex) => ({
       nodeId,
       status,
       progress:
-        lifecycleProgress[Math.min(nodeIndex * lifecycleStatuses.length + statusIndex, lifecycleProgress.length - 1)],
+        lifecycleProgress[
+          Math.min(
+            nodeIndex * lifecycleStatuses.length + statusIndex,
+            lifecycleProgress.length - 1,
+          )
+        ]!,
     })),
   );
 }

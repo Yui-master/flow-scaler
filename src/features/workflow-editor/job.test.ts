@@ -13,6 +13,15 @@ const videoAsset: WorkflowAssetMetadata = {
   previewUrl: "blob:video",
 };
 
+const imageAsset: WorkflowAssetMetadata = {
+  id: "asset-image",
+  kind: "image",
+  fileName: "source.png",
+  mimeType: "image/png",
+  size: 1024,
+  previewUrl: "blob:image",
+};
+
 function node(kind: WorkflowNode["data"]["kind"], id: string): WorkflowNode {
   return createWorkflowNode(kind, id, { x: 0, y: 0 });
 }
@@ -26,7 +35,7 @@ function videoWorkflow() {
     node("exportFile", "export"),
   ];
 
-  nodes[0].data.params = { asset: videoAsset };
+  nodes[0]!.data.params = { asset: videoAsset };
 
   const edges: WorkflowEdge[] = [
     { id: "load-to-extract", source: "load-video", target: "extract-frames" },
@@ -47,7 +56,7 @@ describe("validateWorkflowForJobStart", () => {
 
   test("missing asset on Load Video returns a validation error", () => {
     const { nodes, edges } = videoWorkflow();
-    nodes[0].data.params = {};
+    nodes[0]!.data.params = {};
 
     expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
       valid: false,
@@ -60,9 +69,9 @@ describe("validateWorkflowForJobStart", () => {
     });
   });
 
-  test("empty model on RealESRGAN returns a validation error", () => {
+  test("whitespace-only model on RealESRGAN returns a validation error", () => {
     const { nodes, edges } = videoWorkflow();
-    nodes[2].data.params = { model: "", scale: 4 };
+    nodes[2]!.data.params = { model: "   ", scale: 4 };
 
     expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
       valid: false,
@@ -75,6 +84,16 @@ describe("validateWorkflowForJobStart", () => {
     });
   });
 
+  test("valid Load Image asset returns valid true", () => {
+    const nodes = [node("loadImage", "load-image"), node("exportFile", "export")];
+    nodes[0]!.data.params = { asset: imageAsset };
+    const edges: WorkflowEdge[] = [
+      { id: "image-to-export", source: "load-image", target: "export" },
+    ];
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({ valid: true });
+  });
+
   test("no connected Export File returns a validation error", () => {
     const { nodes, edges } = videoWorkflow();
 
@@ -84,6 +103,29 @@ describe("validateWorkflowForJobStart", () => {
         {
           message: "Workflow needs a connected Export File output.",
         },
+      ],
+    });
+  });
+
+  test("cycle with connected Export File returns a DAG validation error", () => {
+    const { nodes, edges } = videoWorkflow();
+    edges.push({ id: "cycle", source: "combine-frames", target: "extract-frames" });
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
+      valid: false,
+      errors: [{ message: "Workflow graph must be a DAG." }],
+    });
+  });
+
+  test("unknown edge endpoint returns connection endpoint validation error", () => {
+    const { nodes, edges } = videoWorkflow();
+    edges.push({ id: "missing", source: "missing-node", target: "export" });
+
+    expect(validateWorkflowForJobStart(nodes, edges)).toEqual({
+      valid: false,
+      errors: [
+        { message: "Connection source or target node was not found." },
+        { message: "Workflow contains an edge with a missing node." },
       ],
     });
   });
@@ -110,5 +152,32 @@ describe("createJobLifecycleSteps", () => {
       { nodeId: "export", status: "running", progress: 99 },
       { nodeId: "export", status: "completed", progress: 100 },
     ]);
+  });
+
+  test("orders only nodes reachable from connected Export File paths", () => {
+    const { nodes, edges } = videoWorkflow();
+    nodes.push(node("preview", "preview"));
+
+    expect(createJobLifecycleSteps(nodes, edges).map((step) => step.nodeId)).not.toContain(
+      "preview",
+    );
+  });
+
+  test("throws on cycle", () => {
+    const { nodes, edges } = videoWorkflow();
+    edges.push({ id: "cycle", source: "combine-frames", target: "extract-frames" });
+
+    expect(() => createJobLifecycleSteps(nodes, edges)).toThrow(
+      "Workflow graph must be a DAG.",
+    );
+  });
+
+  test("throws on missing edge endpoint", () => {
+    const { nodes, edges } = videoWorkflow();
+    edges.push({ id: "missing", source: "missing-node", target: "export" });
+
+    expect(() => createJobLifecycleSteps(nodes, edges)).toThrow(
+      "Workflow contains an edge with a missing node.",
+    );
   });
 });
