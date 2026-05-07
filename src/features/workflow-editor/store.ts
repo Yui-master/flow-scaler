@@ -11,7 +11,20 @@ import {
 import { create } from "zustand";
 
 import { createWorkflowNode } from "./catalog";
-import type { WorkflowEdge, WorkflowNode, WorkflowNodeKind } from "./types";
+import {
+  createJobLifecycleSteps,
+  validateWorkflowForJobStart,
+} from "./job";
+import type {
+  WorkflowAssetMetadata,
+  WorkflowEdge,
+  WorkflowGraphValidationError,
+  WorkflowJobState as BaseWorkflowJobState,
+  WorkflowNode,
+  WorkflowNodeKind,
+  WorkflowNodeParams,
+  WorkflowNodeStatus,
+} from "./types";
 import { validateWorkflowConnection } from "./validation";
 
 const initialNodes: WorkflowNode[] = [
@@ -42,6 +55,20 @@ const initialEdges: WorkflowEdge[] = [
   },
 ];
 
+type WorkflowEditorJobState = Omit<BaseWorkflowJobState, "id" | "errorMessage"> & {
+  id: string | null;
+  errorMessage: string | null;
+};
+
+type WorkflowJobState = WorkflowEditorJobState;
+
+const initialJobState: WorkflowJobState = {
+  id: null,
+  status: "idle",
+  progress: 0,
+  errorMessage: null,
+};
+
 const cloneNodes = () =>
   initialNodes.map((node) => ({ ...node, data: { ...node.data } }));
 const cloneEdges = () => initialEdges.map((edge) => ({ ...edge }));
@@ -55,10 +82,16 @@ type WorkflowEditorState = {
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   connectionWarning: string | null;
+  job: WorkflowJobState;
+  graphValidationErrors: WorkflowGraphValidationError[];
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (kind: WorkflowNodeKind) => void;
+  updateNodeParams: (nodeId: string, params: Partial<WorkflowNodeParams>) => void;
+  attachAssetToNode: (nodeId: string, asset: WorkflowAssetMetadata) => void;
+  setNodeError: (nodeId: string, errorMessage: string | null) => void;
+  startJob: () => void;
   deleteSelection: () => void;
   clearConnectionWarning: () => void;
   setSelectedNodeId: (nodeId: string | null) => void;
@@ -73,6 +106,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
     selectedNodeId: null,
     selectedEdgeId: null,
     connectionWarning: null,
+    job: initialJobState,
+    graphValidationErrors: [],
     onNodesChange: (changes) =>
       set((state) => ({
         nodes: applyNodeChanges(changes, state.nodes),
@@ -108,6 +143,164 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         selectedNodeId: node.id,
         selectedEdgeId: null,
       }));
+    },
+    updateNodeParams: (nodeId, params) =>
+      set((state) => ({
+        nodes: state.nodes.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  params: { ...node.data.params, ...params },
+                },
+              }
+            : node,
+        ),
+      })),
+    attachAssetToNode: (nodeId, asset) =>
+      set((state) => ({
+        nodes: state.nodes.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: node.data.status === "failed" ? "idle" : node.data.status,
+                  params: {
+                    ...node.data.params,
+                    asset,
+                    errorMessage: undefined,
+                  },
+                },
+              }
+            : node,
+        ),
+      })),
+    setNodeError: (nodeId, errorMessage) =>
+      set((state) => ({
+        nodes: state.nodes.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: errorMessage
+                    ? "failed"
+                    : node.data.status === "failed"
+                      ? "idle"
+                      : node.data.status,
+                  params: {
+                    ...node.data.params,
+                    errorMessage: errorMessage ?? undefined,
+                  },
+                },
+              }
+            : node,
+        ),
+      })),
+    startJob: () => {
+      const { nodes, edges } = get();
+      let validation;
+
+      try {
+        validation = validateWorkflowForJobStart(nodes, edges);
+      } catch (error) {
+        set({
+          graphValidationErrors: [
+            {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to validate workflow.",
+            },
+          ],
+          job: {
+            id: null,
+            status: "failed",
+            progress: 0,
+            errorMessage: "Fix workflow errors before starting a job.",
+          },
+        });
+        return;
+      }
+
+      if (!validation.valid) {
+        set({
+          graphValidationErrors: validation.errors,
+          job: {
+            id: null,
+            status: "failed",
+            progress: 0,
+            errorMessage: "Fix workflow errors before starting a job.",
+          },
+        });
+        return;
+      }
+
+      const jobId = `job-${Date.now().toString(36)}`;
+      let steps;
+
+      try {
+        steps = createJobLifecycleSteps(nodes, edges);
+      } catch (error) {
+        set({
+          graphValidationErrors: [
+            {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to create job lifecycle.",
+            },
+          ],
+          job: {
+            id: jobId,
+            status: "failed",
+            progress: 0,
+            errorMessage: "Fix workflow errors before starting a job.",
+          },
+        });
+        return;
+      }
+
+      set({
+        nodes: nodes.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            status: "idle",
+            params: { ...node.data.params, errorMessage: undefined },
+          },
+        })),
+        graphValidationErrors: [],
+        job: { id: jobId, status: "queued", progress: 0, errorMessage: null },
+      });
+
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      steps.forEach((step, index) => {
+        window.setTimeout(
+          () => {
+            const currentJob = get().job;
+            if (currentJob.id !== jobId) {
+              return;
+            }
+
+            set((state) => ({
+              nodes: updateNodeStatus(state.nodes, step.nodeId, step.status),
+              job: {
+                id: jobId,
+                status: step.progress >= 100 ? "completed" : "running",
+                progress: step.progress,
+                errorMessage: null,
+              },
+            }));
+          },
+          350 * (index + 1),
+        );
+      });
     },
     deleteSelection: () =>
       set((state) => {
@@ -152,6 +345,20 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         selectedNodeId: null,
         selectedEdgeId: null,
         connectionWarning: null,
+        job: initialJobState,
+        graphValidationErrors: [],
       }),
   }),
 );
+
+function updateNodeStatus(
+  nodes: WorkflowNode[],
+  nodeId: string,
+  status: WorkflowNodeStatus,
+): WorkflowNode[] {
+  return nodes.map((node) =>
+    node.id === nodeId
+      ? { ...node, data: { ...node.data, status } }
+      : node,
+  );
+}
