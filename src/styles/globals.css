@@ -1,11 +1,37 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 body {
   background: #0a0a0a;
   color: #ffffff;
+}
+
+.react-flow {
+  --xy-background-color: #09090b;
+  --xy-edge-stroke-default: #facc15;
+  --xy-edge-stroke-width-default: 2;
+  --xy-connectionline-stroke-default: #fde047;
+  --xy-connectionline-stroke-width-default: 2;
+  --xy-attribution-background-color-default: rgba(24, 24, 27, 0.9);
+  --xy-minimap-background-color-default: #18181b;
+  --xy-controls-button-background-color-default: #18181b;
+  --xy-controls-button-background-color-hover-default: #27272a;
+  --xy-controls-button-color-default: #f4f4f5;
+  --xy-controls-button-color-hover-default: #facc15;
+  --xy-controls-button-border-color-default: #3f3f46;
+}
+
+.react-flow__handle {
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.12);
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: #fde047;
+  stroke-width: 3;
 }
