@@ -22,7 +22,7 @@ import type {
   WorkflowJobState as BaseWorkflowJobState,
   WorkflowNode,
   WorkflowNodeKind,
-  WorkflowNodeParams,
+  WorkflowNodeParamsByKind,
   WorkflowNodeStatus,
 } from "./types";
 import { validateWorkflowConnection } from "./validation";
@@ -62,6 +62,14 @@ type WorkflowEditorJobState = Omit<BaseWorkflowJobState, "id" | "errorMessage"> 
 
 type WorkflowJobState = WorkflowEditorJobState;
 
+let jobRunRevision = 0;
+let jobIdCounter = 0;
+
+type UpdateNodeParams = <K extends WorkflowNodeKind>(
+  nodeId: string,
+  params: Partial<WorkflowNodeParamsByKind[K]>,
+) => void;
+
 const initialJobState: WorkflowJobState = {
   id: null,
   status: "idle",
@@ -70,11 +78,36 @@ const initialJobState: WorkflowJobState = {
 };
 
 const cloneNodes = () =>
-  initialNodes.map((node) => ({ ...node, data: { ...node.data } }));
+  initialNodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      inputTypes: [...node.data.inputTypes],
+      outputTypes: [...node.data.outputTypes],
+      params: {
+        ...node.data.params,
+        ...("asset" in node.data.params && node.data.params.asset
+          ? { asset: { ...node.data.params.asset } }
+          : {}),
+      },
+    },
+  }));
 const cloneEdges = () => initialEdges.map((edge) => ({ ...edge }));
 
 const createNodeId = (kind: WorkflowNodeKind) =>
   `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const createJobId = () =>
+  `job-${Date.now().toString(36)}-${(jobIdCounter++).toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+const invalidateJobRun = () => {
+  jobRunRevision += 1;
+};
+
+const cancelLocalJobSimulation = () => {
+  invalidateJobRun();
+  return { job: initialJobState, graphValidationErrors: [] };
+};
 
 type WorkflowEditorState = {
   nodes: WorkflowNode[];
@@ -88,7 +121,7 @@ type WorkflowEditorState = {
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (kind: WorkflowNodeKind) => void;
-  updateNodeParams: (nodeId: string, params: Partial<WorkflowNodeParams>) => void;
+  updateNodeParams: UpdateNodeParams;
   attachAssetToNode: (nodeId: string, asset: WorkflowAssetMetadata) => void;
   setNodeError: (nodeId: string, errorMessage: string | null) => void;
   startJob: () => void;
@@ -111,10 +144,12 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
     onNodesChange: (changes) =>
       set((state) => ({
         nodes: applyNodeChanges(changes, state.nodes),
+        ...cancelLocalJobSimulation(),
       })),
     onEdgesChange: (changes) =>
       set((state) => ({
         edges: applyEdgeChanges(changes, state.edges),
+        ...cancelLocalJobSimulation(),
       })),
     onConnect: (connection) => {
       const { nodes, edges } = get();
@@ -128,6 +163,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
       set({
         edges: addEdge({ ...connection, type: "smoothstep" }, edges),
         connectionWarning: null,
+        ...cancelLocalJobSimulation(),
       });
     },
     addNode: (kind) => {
@@ -142,6 +178,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         nodes: [...state.nodes, node],
         selectedNodeId: node.id,
         selectedEdgeId: null,
+        ...cancelLocalJobSimulation(),
       }));
     },
     updateNodeParams: (nodeId, params) =>
@@ -157,6 +194,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
               }
             : node,
         ),
+        ...cancelLocalJobSimulation(),
       })),
     attachAssetToNode: (nodeId, asset) =>
       set((state) => ({
@@ -176,6 +214,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
               }
             : node,
         ),
+        ...cancelLocalJobSimulation(),
       })),
     setNodeError: (nodeId, errorMessage) =>
       set((state) => ({
@@ -238,7 +277,9 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         return;
       }
 
-      const jobId = `job-${Date.now().toString(36)}`;
+      invalidateJobRun();
+      const runRevision = jobRunRevision;
+      const jobId = createJobId();
       let steps;
 
       try {
@@ -284,7 +325,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         window.setTimeout(
           () => {
             const currentJob = get().job;
-            if (currentJob.id !== jobId) {
+            if (currentJob.id !== jobId || jobRunRevision !== runRevision) {
               return;
             }
 
@@ -325,6 +366,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
           ),
           selectedNodeId: null,
           selectedEdgeId: null,
+          ...cancelLocalJobSimulation(),
         };
       }),
     clearConnectionWarning: () => set({ connectionWarning: null }),
@@ -338,7 +380,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         selectedEdgeId,
         selectedNodeId: selectedEdgeId ? null : get().selectedNodeId,
       }),
-    reset: () =>
+    reset: () => {
+      invalidateJobRun();
       set({
         nodes: cloneNodes(),
         edges: cloneEdges(),
@@ -347,7 +390,8 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         connectionWarning: null,
         job: initialJobState,
         graphValidationErrors: [],
-      }),
+      });
+    },
   }),
 );
 
