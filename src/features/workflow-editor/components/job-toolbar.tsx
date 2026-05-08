@@ -19,6 +19,8 @@ export function JobToolbar({
   onStartJob,
   onReset,
 }: JobToolbarProps) {
+  const progress = Math.min(100, Math.max(0, job.progress));
+
   return (
     <div className="flex flex-row flex-wrap items-center gap-4 border-b border-yellow-500/20 bg-zinc-950/95 p-4 text-zinc-100">
       {validationErrors.length > 0 && (
@@ -33,8 +35,10 @@ export function JobToolbar({
             Fix before Start Job
           </h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-100">
-            {validationErrors.map((error, index) => (
-              <li key={`${error.nodeId ?? "graph"}-${index}`}>{error.message}</li>
+            {validationErrors.map((error) => (
+              <li key={`${error.nodeId ?? "graph"}-${error.message}`}>
+                {error.message}
+              </li>
             ))}
           </ul>
         </section>
@@ -43,23 +47,24 @@ export function JobToolbar({
       {job.status !== "idle" && (
         <section
           aria-label="Workflow job status"
+          aria-live="polite"
           className="min-w-56 rounded-2xl border border-yellow-500/20 bg-zinc-900/80 p-4"
         >
           <div className="flex items-center justify-between gap-4 text-sm font-semibold">
             <span className="text-white">{capitalizeStatus(job.status)}</span>
-            <span className="text-yellow-300">{job.progress}%</span>
+            <span className="text-yellow-300">{progress}%</span>
           </div>
           <div
             aria-label="Workflow job progress"
             aria-valuemax={100}
             aria-valuemin={0}
-            aria-valuenow={job.progress}
+            aria-valuenow={progress}
             className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800"
             role="progressbar"
           >
             <div
               className="h-full rounded-full bg-yellow-400 transition-all"
-              style={{ width: `${job.progress}%` }}
+              style={{ width: `${progress}%` }}
             />
           </div>
         </section>
