@@ -1,9 +1,14 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import type { ReactNode } from "react";
 
 import { formatBytes } from "../media";
-import type { WorkflowNode } from "../types";
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowNodeParamsByKind,
+} from "../types";
 
 const categoryStyles = {
   Input: "border-emerald-400/50 bg-emerald-400/10 text-emerald-200",
@@ -21,11 +26,6 @@ const statusStyles = {
 } as const;
 
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowNode>) {
-  const asset = "asset" in data.params ? data.params.asset : undefined;
-  const model = "model" in data.params ? data.params.model : undefined;
-  const outputName =
-    "outputName" in data.params ? data.params.outputName : undefined;
-
   return (
     <div
       className={`min-w-64 rounded-2xl border bg-zinc-950/95 p-4 shadow-2xl shadow-black/30 ${
@@ -91,31 +91,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNode>) {
         </div>
       </div>
 
-      {(asset || data.kind === "realesrganUpscale" || outputName || data.params.errorMessage) && (
-        <div className="mt-3 space-y-2 text-xs">
-          {asset && (
-            <SummaryBlock className="border-yellow-400/30 bg-yellow-400/10 text-yellow-100">
-              <span className="font-semibold text-yellow-200">{asset.fileName}</span>
-              <span className="text-yellow-100/70">{formatBytes(asset.size)}</span>
-            </SummaryBlock>
-          )}
-          {data.kind === "realesrganUpscale" && (
-            <SummaryBlock className="border-yellow-400/30 bg-yellow-400/10 text-yellow-100">
-              Model: {model ?? "realesrgan-x4plus"}
-            </SummaryBlock>
-          )}
-          {data.kind === "exportFile" && outputName && (
-            <SummaryBlock className="border-sky-400/30 bg-sky-400/10 text-sky-100">
-              Output: {outputName}
-            </SummaryBlock>
-          )}
-          {data.params.errorMessage && (
-            <SummaryBlock className="border-red-400/40 bg-red-500/10 text-red-200">
-              {data.params.errorMessage}
-            </SummaryBlock>
-          )}
-        </div>
-      )}
+      <NodeSummary data={data} />
 
       {data.outputTypes.length > 0 && (
         <Handle
@@ -136,15 +112,97 @@ function TypeBadge({ label }: { label: string }) {
   );
 }
 
+function NodeSummary({ data }: { data: WorkflowNodeData }) {
+  const summaryBlocks = renderSummaryBlocks(data);
+
+  if (summaryBlocks.length === 0) {
+    return null;
+  }
+
+  return <div className="mt-3 space-y-2 text-xs">{summaryBlocks}</div>;
+}
+
+function renderSummaryBlocks(data: WorkflowNodeData): ReactNode[] {
+  const blocks: ReactNode[] = [];
+
+  switch (data.kind) {
+    case "loadImage":
+    case "loadVideo": {
+      const params = data.params as WorkflowNodeParamsByKind["loadImage"];
+
+      if (params.asset) {
+        blocks.push(
+          <SummaryBlock key="asset" variant="asset">
+            <span className="font-semibold text-yellow-200">
+              {params.asset.fileName}
+            </span>
+            <span className="text-yellow-100/70">
+              {formatBytes(params.asset.size)}
+            </span>
+          </SummaryBlock>,
+        );
+      }
+
+      break;
+    }
+    case "realesrganUpscale": {
+      const params =
+        data.params as WorkflowNodeParamsByKind["realesrganUpscale"];
+
+      blocks.push(
+        <SummaryBlock key="model" variant="asset">
+          Model: {params.model ?? "realesrgan-x4plus"}
+        </SummaryBlock>,
+      );
+      break;
+    }
+    case "exportFile": {
+      const params = data.params as WorkflowNodeParamsByKind["exportFile"];
+
+      if (params.outputName) {
+        blocks.push(
+          <SummaryBlock key="output" variant="output">
+            Output: {params.outputName}
+          </SummaryBlock>,
+        );
+      }
+
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (data.params.errorMessage) {
+    blocks.push(
+      <SummaryBlock key="error" variant="error">
+        {data.params.errorMessage}
+      </SummaryBlock>,
+    );
+  }
+
+  return blocks;
+}
+
+const summaryBlockStyles = {
+  asset: "border-yellow-400/30 bg-yellow-400/10 text-yellow-100",
+  output: "border-sky-400/30 bg-sky-400/10 text-sky-100",
+  error: "border-red-400/40 bg-red-500/10 text-red-200",
+} as const;
+
+type SummaryBlockVariant = keyof typeof summaryBlockStyles;
+
 function SummaryBlock({
   children,
-  className,
+  variant,
 }: {
-  children: React.ReactNode;
-  className: string;
+  children: ReactNode;
+  variant: SummaryBlockVariant;
 }) {
   return (
-    <div className={`rounded-lg border px-2.5 py-2 ${className}`}>
+    <div
+      className={`rounded-lg border px-2.5 py-2 ${summaryBlockStyles[variant]}`}
+    >
       {children}
     </div>
   );
