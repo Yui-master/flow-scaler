@@ -2,6 +2,7 @@
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 
+import { formatBytes } from "../media";
 import type { WorkflowNode } from "../types";
 
 const categoryStyles = {
@@ -20,6 +21,11 @@ const statusStyles = {
 } as const;
 
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowNode>) {
+  const asset = "asset" in data.params ? data.params.asset : undefined;
+  const model = "model" in data.params ? data.params.model : undefined;
+  const outputName =
+    "outputName" in data.params ? data.params.outputName : undefined;
+
   return (
     <div
       className={`min-w-64 rounded-2xl border bg-zinc-950/95 p-4 shadow-2xl shadow-black/30 ${
@@ -85,6 +91,32 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNode>) {
         </div>
       </div>
 
+      {(asset || data.kind === "realesrganUpscale" || outputName || data.params.errorMessage) && (
+        <div className="mt-3 space-y-2 text-xs">
+          {asset && (
+            <SummaryBlock className="border-yellow-400/30 bg-yellow-400/10 text-yellow-100">
+              <span className="font-semibold text-yellow-200">{asset.fileName}</span>
+              <span className="text-yellow-100/70">{formatBytes(asset.size)}</span>
+            </SummaryBlock>
+          )}
+          {data.kind === "realesrganUpscale" && (
+            <SummaryBlock className="border-yellow-400/30 bg-yellow-400/10 text-yellow-100">
+              Model: {model ?? "realesrgan-x4plus"}
+            </SummaryBlock>
+          )}
+          {data.kind === "exportFile" && outputName && (
+            <SummaryBlock className="border-sky-400/30 bg-sky-400/10 text-sky-100">
+              Output: {outputName}
+            </SummaryBlock>
+          )}
+          {data.params.errorMessage && (
+            <SummaryBlock className="border-red-400/40 bg-red-500/10 text-red-200">
+              {data.params.errorMessage}
+            </SummaryBlock>
+          )}
+        </div>
+      )}
+
       {data.outputTypes.length > 0 && (
         <Handle
           type="source"
@@ -101,5 +133,19 @@ function TypeBadge({ label }: { label: string }) {
     <span className="rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
       {label}
     </span>
+  );
+}
+
+function SummaryBlock({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className: string;
+}) {
+  return (
+    <div className={`rounded-lg border px-2.5 py-2 ${className}`}>
+      {children}
+    </div>
   );
 }
