@@ -7,13 +7,17 @@ import {
   formatBytes,
   validateWorkflowAssetFile,
 } from "../media";
-import type { WorkflowAssetMetadata, WorkflowNode } from "../types";
+import type {
+  WorkflowAssetMetadata,
+  WorkflowNode,
+  WorkflowNodeParams,
+} from "../types";
 
 type NodeInspectorProps = {
   selectedNode: WorkflowNode | null;
   onAttachAsset: (nodeId: string, asset: WorkflowAssetMetadata) => void;
   onSetNodeError: (nodeId: string, errorMessage: string) => void;
-  onUpdateNodeParams: (nodeId: string, params: Record<string, string>) => void;
+  onUpdateNodeParams: (nodeId: string, params: Partial<WorkflowNodeParams>) => void;
 };
 
 const fileAcceptByKind = {
@@ -56,30 +60,44 @@ export function NodeInspector({
   const isPreviewVisible = selectedNode.data.kind === "preview" || Boolean(asset);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+
     if (!selectedNode || !isUploadNode) {
+      input.value = "";
       return;
     }
 
-    const file = event.target.files?.[0];
+    const file = input.files?.[0];
     if (!file) {
+      input.value = "";
       return;
     }
 
     const validation = validateWorkflowAssetFile(file);
     if (!validation.valid) {
       onSetNodeError(selectedNode.id, validation.reason);
+      input.value = "";
       return;
     }
 
     const requiredKind = requiredAssetKindByNodeKind[selectedNode.data.kind];
     if (validation.kind !== requiredKind) {
       onSetNodeError(selectedNode.id, mismatchErrorByNodeKind[selectedNode.data.kind]);
+      input.value = "";
       return;
     }
 
     const previewUrl = validation.kind === "image" ? URL.createObjectURL(file) : null;
     const metadata = createWorkflowAssetMetadata(file, validation.kind, previewUrl);
+    const previousPreviewUrl = asset?.previewUrl;
+
     onAttachAsset(selectedNode.id, metadata);
+
+    if (previousPreviewUrl && previousPreviewUrl !== previewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl);
+    }
+
+    input.value = "";
   }
 
   return (
@@ -103,7 +121,10 @@ export function NodeInspector({
             Current status: <span className="font-semibold text-white">{selectedNode.data.status}</span>
           </p>
           {errorMessage && (
-            <p className="mt-3 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+            <p
+              role="alert"
+              className="mt-3 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200"
+            >
               {errorMessage}
             </p>
           )}
