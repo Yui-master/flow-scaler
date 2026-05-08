@@ -10,15 +10,32 @@ import {
 import type {
   WorkflowAssetMetadata,
   WorkflowNode,
-  WorkflowNodeParams,
+  WorkflowNodeParamsByKind,
 } from "../types";
 
 type NodeInspectorProps = {
   selectedNode: WorkflowNode | null;
   onAttachAsset: (nodeId: string, asset: WorkflowAssetMetadata) => void;
   onSetNodeError: (nodeId: string, errorMessage: string) => void;
-  onUpdateNodeParams: (nodeId: string, params: Partial<WorkflowNodeParams>) => void;
+  onUpdateNodeParams: (
+    nodeId: string,
+    params: Partial<WorkflowNodeParamsByKind["realesrganUpscale"]>,
+  ) => void;
 };
+
+type UploadNodeKind = "loadImage" | "loadVideo";
+
+function isUploadNodeKind(kind: WorkflowNode["data"]["kind"]): kind is UploadNodeKind {
+  return kind === "loadImage" || kind === "loadVideo";
+}
+
+function hasRealESRGANParams(
+  node: WorkflowNode,
+): node is WorkflowNode & {
+  data: { params: WorkflowNodeParamsByKind["realesrganUpscale"] };
+} {
+  return node.data.kind === "realesrganUpscale";
+}
 
 const fileAcceptByKind = {
   loadImage: "image/png,image/jpeg",
@@ -56,17 +73,21 @@ export function NodeInspector({
 
   const asset = "asset" in selectedNode.data.params ? selectedNode.data.params.asset : undefined;
   const errorMessage = selectedNode.data.params.errorMessage;
-  const isUploadNode = selectedNode.data.kind === "loadImage" || selectedNode.data.kind === "loadVideo";
+  const isUploadNode = isUploadNodeKind(selectedNode.data.kind);
+  const realesrganParams = hasRealESRGANParams(selectedNode)
+    ? selectedNode.data.params
+    : null;
   const isPreviewVisible = selectedNode.data.kind === "preview" || Boolean(asset);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.target;
 
-    if (!selectedNode || !isUploadNode) {
+    if (!selectedNode || !isUploadNodeKind(selectedNode.data.kind)) {
       input.value = "";
       return;
     }
 
+    const uploadNodeKind = selectedNode.data.kind;
     const file = input.files?.[0];
     if (!file) {
       input.value = "";
@@ -80,9 +101,9 @@ export function NodeInspector({
       return;
     }
 
-    const requiredKind = requiredAssetKindByNodeKind[selectedNode.data.kind];
+    const requiredKind = requiredAssetKindByNodeKind[uploadNodeKind];
     if (validation.kind !== requiredKind) {
-      onSetNodeError(selectedNode.id, mismatchErrorByNodeKind[selectedNode.data.kind]);
+      onSetNodeError(selectedNode.id, mismatchErrorByNodeKind[uploadNodeKind]);
       input.value = "";
       return;
     }
@@ -130,7 +151,7 @@ export function NodeInspector({
           )}
         </section>
 
-        {isUploadNode && (
+        {isUploadNodeKind(selectedNode.data.kind) && (
           <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900/70 p-4">
             <h3 className="text-sm font-semibold text-yellow-300">Upload</h3>
             <label className="mt-3 block text-sm font-medium text-zinc-300" htmlFor={`${selectedNode.id}-asset`}>
@@ -161,14 +182,14 @@ export function NodeInspector({
           </section>
         )}
 
-        {selectedNode.data.kind === "realesrganUpscale" && (
+        {realesrganParams && (
           <section className="rounded-2xl border border-yellow-500/20 bg-zinc-900/70 p-4">
             <label className="text-sm font-semibold text-yellow-300" htmlFor={`${selectedNode.id}-model`}>
               RealESRGAN model
             </label>
             <select
               id={`${selectedNode.id}-model`}
-              value={selectedNode.data.params.model ?? "realesrgan-x4plus"}
+              value={realesrganParams.model ?? "realesrgan-x4plus"}
               onChange={(event) => onUpdateNodeParams(selectedNode.id, { model: event.target.value })}
               className="mt-3 block w-full rounded-xl border border-yellow-500/20 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
             >

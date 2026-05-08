@@ -2,8 +2,13 @@
 
 import type { WorkflowGraphValidationError, WorkflowJobState } from "../types";
 
+type JobToolbarJobState = Omit<WorkflowJobState, "id" | "errorMessage"> & {
+  id: string | null;
+  errorMessage: string | null;
+};
+
 type JobToolbarProps = {
-  job: WorkflowJobState;
+  job: JobToolbarJobState;
   validationErrors: WorkflowGraphValidationError[];
   onStartJob: () => void;
   onReset: () => void;
@@ -22,7 +27,7 @@ export function JobToolbar({
   const progress = Math.min(100, Math.max(0, job.progress));
 
   return (
-    <div className="flex flex-row flex-wrap items-center gap-4 border-b border-yellow-500/20 bg-zinc-950/95 p-4 text-zinc-100">
+    <div className="flex flex-row flex-wrap items-center gap-3 text-zinc-100">
       {validationErrors.length > 0 && (
         <section
           aria-labelledby="workflow-validation-errors-heading"

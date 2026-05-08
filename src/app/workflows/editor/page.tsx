@@ -19,6 +19,19 @@ import { NodeSidebar } from "../../../features/workflow-editor/components/node-s
 import { WorkflowNode } from "../../../features/workflow-editor/components/workflow-node";
 import { useWorkflowEditorStore } from "../../../features/workflow-editor/store";
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable
+  );
+}
+
 export default function WorkflowEditorPage() {
   const {
     nodes,
@@ -62,6 +75,10 @@ export default function WorkflowEditorPage() {
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         deleteSelection();
