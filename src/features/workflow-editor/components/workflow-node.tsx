@@ -1,14 +1,8 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { ReactNode } from "react";
 
-import { formatBytes } from "../media";
-import type {
-  WorkflowNode,
-  WorkflowNodeData,
-  WorkflowNodeParamsByKind,
-} from "../types";
+import type { WorkflowNode } from "../types";
 
 const categoryStyles = {
   Input: "border-emerald-400/50 bg-emerald-400/10 text-emerald-200",
@@ -91,8 +85,6 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNode>) {
         </div>
       </div>
 
-      <NodeSummary data={data} />
-
       {data.outputTypes.length > 0 && (
         <Handle
           type="source"
@@ -109,101 +101,5 @@ function TypeBadge({ label }: { label: string }) {
     <span className="rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
       {label}
     </span>
-  );
-}
-
-function NodeSummary({ data }: { data: WorkflowNodeData }) {
-  const summaryBlocks = renderSummaryBlocks(data);
-
-  if (summaryBlocks.length === 0) {
-    return null;
-  }
-
-  return <div className="mt-3 space-y-2 text-xs">{summaryBlocks}</div>;
-}
-
-function renderSummaryBlocks(data: WorkflowNodeData): ReactNode[] {
-  const blocks: ReactNode[] = [];
-
-  switch (data.kind) {
-    case "loadImage":
-    case "loadVideo": {
-      const params = data.params as WorkflowNodeParamsByKind["loadImage"];
-
-      if (params.asset) {
-        blocks.push(
-          <SummaryBlock key="asset" variant="asset">
-            <span className="font-semibold text-yellow-200">
-              {params.asset.fileName}
-            </span>
-            <span className="text-yellow-100/70">
-              {formatBytes(params.asset.size)}
-            </span>
-          </SummaryBlock>,
-        );
-      }
-
-      break;
-    }
-    case "realesrganUpscale": {
-      const params =
-        data.params as WorkflowNodeParamsByKind["realesrganUpscale"];
-
-      blocks.push(
-        <SummaryBlock key="model" variant="asset">
-          Model: {params.model ?? "realesrgan-x4plus"}
-        </SummaryBlock>,
-      );
-      break;
-    }
-    case "exportFile": {
-      const params = data.params as WorkflowNodeParamsByKind["exportFile"];
-
-      if (params.outputName) {
-        blocks.push(
-          <SummaryBlock key="output" variant="output">
-            Output: {params.outputName}
-          </SummaryBlock>,
-        );
-      }
-
-      break;
-    }
-    default:
-      break;
-  }
-
-  if (data.params.errorMessage) {
-    blocks.push(
-      <SummaryBlock key="error" variant="error">
-        {data.params.errorMessage}
-      </SummaryBlock>,
-    );
-  }
-
-  return blocks;
-}
-
-const summaryBlockStyles = {
-  asset: "border-yellow-400/30 bg-yellow-400/10 text-yellow-100",
-  output: "border-sky-400/30 bg-sky-400/10 text-sky-100",
-  error: "border-red-400/40 bg-red-500/10 text-red-200",
-} as const;
-
-type SummaryBlockVariant = keyof typeof summaryBlockStyles;
-
-function SummaryBlock({
-  children,
-  variant,
-}: {
-  children: ReactNode;
-  variant: SummaryBlockVariant;
-}) {
-  return (
-    <div
-      className={`rounded-lg border px-2.5 py-2 ${summaryBlockStyles[variant]}`}
-    >
-      {children}
-    </div>
   );
 }

@@ -3,7 +3,6 @@ import type {
   WorkflowNode,
   WorkflowNodeCategory,
   WorkflowNodeKind,
-  WorkflowNodeParams,
 } from "./types";
 
 export type WorkflowNodeDefinition = {
@@ -13,7 +12,7 @@ export type WorkflowNodeDefinition = {
   description: string;
   inputTypes: WorkflowDataType[];
   outputTypes: WorkflowDataType[];
-  params: WorkflowNodeParams;
+  params: Record<string, unknown>;
 };
 
 export const workflowNodeDefinitions: WorkflowNodeDefinition[] = [
@@ -51,7 +50,7 @@ export const workflowNodeDefinitions: WorkflowNodeDefinition[] = [
     description: "Upscale images or frame sequences.",
     inputTypes: ["image", "frameSequence"],
     outputTypes: ["image", "frameSequence"],
-    params: { model: "realesrgan-x4plus", scale: 4 },
+    params: { scale: 2 },
   },
   {
     kind: "frameSequenceProcessor",
@@ -78,7 +77,7 @@ export const workflowNodeDefinitions: WorkflowNodeDefinition[] = [
     description: "Write an image, video, or frame sequence output.",
     inputTypes: ["image", "video", "frameSequence"],
     outputTypes: ["file"],
-    params: { outputName: "flowscaler-output" },
+    params: {},
   },
   {
     kind: "preview",

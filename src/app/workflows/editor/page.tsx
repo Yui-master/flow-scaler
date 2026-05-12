@@ -13,32 +13,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useMemo } from "react";
 
-import { JobToolbar } from "../../../features/workflow-editor/components/job-toolbar";
-import { NodeInspector } from "../../../features/workflow-editor/components/node-inspector";
 import { NodeSidebar } from "../../../features/workflow-editor/components/node-sidebar";
 import { WorkflowNode } from "../../../features/workflow-editor/components/workflow-node";
 import { useWorkflowEditorStore } from "../../../features/workflow-editor/store";
-
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    target.isContentEditable
-  );
-}
 
 export default function WorkflowEditorPage() {
   const {
     nodes,
     edges,
-    selectedNodeId,
-    job,
-    graphValidationErrors,
     connectionWarning,
     onNodesChange,
     onEdgesChange,
@@ -48,19 +30,10 @@ export default function WorkflowEditorPage() {
     clearConnectionWarning,
     setSelectedNodeId,
     setSelectedEdgeId,
-    updateNodeParams,
-    attachAssetToNode,
-    setNodeError,
-    startJob,
     reset,
   } = useWorkflowEditorStore();
 
   const nodeTypes = useMemo(() => ({ workflowNode: WorkflowNode }), []);
-
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId],
-  );
 
   const handleSelectionChange = useCallback(
     ({
@@ -75,10 +48,6 @@ export default function WorkflowEditorPage() {
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (isEditableTarget(event.target)) {
-        return;
-      }
-
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         deleteSelection();
@@ -96,7 +65,7 @@ export default function WorkflowEditorPage() {
           </p>
           <h1 className="text-2xl font-semibold text-white">Workflow Editor</h1>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex items-center gap-3">
           {connectionWarning && (
             <button
               type="button"
@@ -107,12 +76,13 @@ export default function WorkflowEditorPage() {
               {connectionWarning}
             </button>
           )}
-          <JobToolbar
-            job={job}
-            validationErrors={graphValidationErrors}
-            onStartJob={startJob}
-            onReset={reset}
-          />
+          <button
+            type="button"
+            onClick={reset}
+            className="rounded-full border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-yellow-400 hover:text-yellow-200"
+          >
+            Reset sample
+          </button>
         </div>
       </header>
 
@@ -154,12 +124,6 @@ export default function WorkflowEditorPage() {
             />
           </ReactFlow>
         </section>
-        <NodeInspector
-          selectedNode={selectedNode}
-          onAttachAsset={attachAssetToNode}
-          onSetNodeError={setNodeError}
-          onUpdateNodeParams={updateNodeParams}
-        />
       </div>
     </main>
   );
