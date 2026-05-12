@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 
 import {
   createWorkflowAssetMetadata,
@@ -58,6 +58,8 @@ export function NodeInspector({
   onSetNodeError,
   onUpdateNodeParams,
 }: NodeInspectorProps) {
+  const [isUploading, setIsUploading] = useState(false);
+
   if (!selectedNode) {
     return (
       <aside className="w-80 border-l border-yellow-500/20 bg-zinc-950/95 p-5 text-zinc-100">
@@ -79,7 +81,7 @@ export function NodeInspector({
     : null;
   const isPreviewVisible = selectedNode.data.kind === "preview" || Boolean(asset);
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.target;
 
     if (!selectedNode || !isUploadNodeKind(selectedNode.data.kind)) {
@@ -109,16 +111,49 @@ export function NodeInspector({
     }
 
     const previewUrl = validation.kind === "image" ? URL.createObjectURL(file) : null;
-    const metadata = createWorkflowAssetMetadata(file, validation.kind, previewUrl);
     const previousPreviewUrl = asset?.previewUrl;
+    const formData = new FormData();
+    formData.set("file", file);
+    setIsUploading(true);
 
-    onAttachAsset(selectedNode.id, metadata);
+    try {
+      const response = await fetch("/api/media/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as
+        | { assetId: string; fileName: string; kind: "image" | "video"; mimeType: string; size: number }
+        | { errorMessage: string };
 
-    if (previousPreviewUrl && previousPreviewUrl !== previewUrl) {
-      URL.revokeObjectURL(previousPreviewUrl);
+      if (!response.ok || "errorMessage" in payload) {
+        throw new Error("errorMessage" in payload ? payload.errorMessage : "Upload failed.");
+      }
+
+      const metadata = {
+        ...createWorkflowAssetMetadata(file, validation.kind, previewUrl),
+        assetId: payload.assetId,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        size: payload.size,
+      };
+
+      onAttachAsset(selectedNode.id, metadata);
+
+      if (previousPreviewUrl && previousPreviewUrl !== previewUrl) {
+        URL.revokeObjectURL(previousPreviewUrl);
+      }
+    } catch (error) {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      onSetNodeError(
+        selectedNode.id,
+        error instanceof Error ? error.message : "Upload failed.",
+      );
+    } finally {
+      setIsUploading(false);
+      input.value = "";
     }
-
-    input.value = "";
   }
 
   return (
@@ -162,8 +197,10 @@ export function NodeInspector({
               type="file"
               accept={fileAcceptByKind[selectedNode.data.kind]}
               onChange={handleFileChange}
-              className="mt-2 block w-full cursor-pointer rounded-xl border border-yellow-500/20 bg-zinc-950 text-sm text-zinc-300 file:mr-3 file:border-0 file:bg-yellow-400 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:border-yellow-400/70 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
+              disabled={isUploading}
+              className="mt-2 block w-full cursor-pointer rounded-xl border border-yellow-500/20 bg-zinc-950 text-sm text-zinc-300 file:mr-3 file:border-0 file:bg-yellow-400 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:border-yellow-400/70 focus:ring-2 focus:ring-yellow-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
+            {isUploading && <p className="mt-2 text-xs text-yellow-200">Uploading...</p>}
 
             {asset && (
               <div className="mt-4 space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 text-sm text-zinc-300">

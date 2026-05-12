@@ -192,8 +192,7 @@ export function createJobLifecycleSteps(
   edges: WorkflowEdge[],
 ): WorkflowJobLifecycleStep[] {
   const { orderedIds } = analyzeWorkflowGraph(nodes, edges);
-
-  return orderedIds.flatMap((nodeId, nodeIndex) =>
+  const steps = orderedIds.flatMap((nodeId, nodeIndex) =>
     lifecycleStatuses.map((status, statusIndex) => ({
       nodeId,
       status,
@@ -206,4 +205,11 @@ export function createJobLifecycleSteps(
         ]!,
     })),
   );
+  const lastStep = steps.at(-1);
+
+  if (lastStep && lastStep.progress < 100) {
+    steps.push({ ...lastStep, status: "completed", progress: 100 });
+  }
+
+  return steps;
 }

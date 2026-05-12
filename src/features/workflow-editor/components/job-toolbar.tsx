@@ -72,6 +72,14 @@ export function JobToolbar({
               style={{ width: `${progress}%` }}
             />
           </div>
+          {job.status === "completed" && job.downloadUrl && (
+            <a
+              className="mt-3 inline-flex rounded-xl border border-yellow-400/50 px-3 py-2 text-sm font-semibold text-yellow-200 transition hover:bg-yellow-400/10"
+              href={job.downloadUrl}
+            >
+              Download output
+            </a>
+          )}
         </section>
       )}
 

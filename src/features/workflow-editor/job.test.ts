@@ -163,6 +163,25 @@ describe("createJobLifecycleSteps", () => {
     );
   });
 
+  test("adds a terminal completed step for shorter workflows", () => {
+    const nodes = [
+      node("loadImage", "load-image"),
+      node("realesrganUpscale", "upscale"),
+      node("exportFile", "export"),
+    ];
+    nodes[0]!.data.params = { asset: imageAsset };
+    const edges = [
+      { id: "load-upscale", source: "load-image", target: "upscale" },
+      { id: "upscale-export", source: "upscale", target: "export" },
+    ];
+
+    expect(createJobLifecycleSteps(nodes, edges).at(-1)).toEqual({
+      nodeId: "export",
+      status: "completed",
+      progress: 100,
+    });
+  });
+
   test("throws on cycle", () => {
     const { nodes, edges } = videoWorkflow();
     edges.push({ id: "cycle", source: "combine-frames", target: "extract-frames" });

@@ -11,10 +11,7 @@ import {
 import { create } from "zustand";
 
 import { createWorkflowNode } from "./catalog";
-import {
-  createJobLifecycleSteps,
-  validateWorkflowForJobStart,
-} from "./job";
+import { validateWorkflowForJobStart } from "./job";
 import type {
   WorkflowAssetMetadata,
   WorkflowEdge,
@@ -238,7 +235,7 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
             : node,
         ),
       })),
-    startJob: () => {
+    startJob: async () => {
       const { nodes, edges } = get();
       let validation;
 
@@ -277,25 +274,19 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         return;
       }
 
-      invalidateJobRun();
-      const runRevision = jobRunRevision;
-      const jobId = createJobId();
-      let steps;
+      const loadImage = nodes.find((node) => node.data.kind === "loadImage");
+      const asset = loadImage && "asset" in loadImage.data.params ? loadImage.data.params.asset : undefined;
 
-      try {
-        steps = createJobLifecycleSteps(nodes, edges);
-      } catch (error) {
+      if (!asset?.assetId) {
         set({
           graphValidationErrors: [
             {
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Unable to create job lifecycle.",
+              nodeId: loadImage?.id,
+              message: "Load Image needs a server-uploaded asset before starting a job.",
             },
           ],
           job: {
-            id: jobId,
+            id: null,
             status: "failed",
             progress: 0,
             errorMessage: "Fix workflow errors before starting a job.",
@@ -304,44 +295,97 @@ export const useWorkflowEditorStore = create<WorkflowEditorState>(
         return;
       }
 
+      invalidateJobRun();
+      const runRevision = jobRunRevision;
+      const jobId = createJobId();
+
       set({
         nodes: nodes.map((node) => ({
           ...node,
           data: {
             ...node.data,
-            status: "idle",
+            status:
+              node.data.kind === "loadImage" ||
+              node.data.kind === "realesrganUpscale" ||
+              node.data.kind === "exportFile"
+                ? "running"
+                : "idle",
             params: { ...node.data.params, errorMessage: undefined },
           },
         })),
         graphValidationErrors: [],
-        job: { id: jobId, status: "queued", progress: 0, errorMessage: null },
+        job: { id: jobId, status: "running", progress: 10, errorMessage: null },
       });
 
-      if (typeof window === "undefined") {
-        return;
-      }
+      try {
+        const response = await fetch("/api/media/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodes, edges }),
+        });
+        const payload = (await response.json()) as {
+          job: {
+            id: string;
+            status: "completed" | "failed";
+            progress: number;
+            outputId?: string;
+            downloadUrl?: string;
+            errorMessage?: string;
+          };
+        };
 
-      steps.forEach((step, index) => {
-        window.setTimeout(
-          () => {
-            const currentJob = get().job;
-            if (currentJob.id !== jobId || jobRunRevision !== runRevision) {
-              return;
-            }
+        if (jobRunRevision !== runRevision) {
+          return;
+        }
 
-            set((state) => ({
-              nodes: updateNodeStatus(state.nodes, step.nodeId, step.status),
-              job: {
-                id: jobId,
-                status: step.progress >= 100 ? "completed" : "running",
-                progress: step.progress,
-                errorMessage: null,
-              },
-            }));
+        if (!response.ok || payload.job.status === "failed") {
+          throw new Error(payload.job.errorMessage ?? "Media job failed.");
+        }
+
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.data.kind === "loadImage" ||
+            node.data.kind === "realesrganUpscale" ||
+            node.data.kind === "exportFile"
+              ? { ...node, data: { ...node.data, status: "completed" } }
+              : node,
+          ),
+          job: {
+            id: payload.job.id,
+            status: "completed",
+            progress: 100,
+            errorMessage: null,
+            outputId: payload.job.outputId,
+            downloadUrl: payload.job.downloadUrl,
           },
-          350 * (index + 1),
-        );
-      });
+        }));
+      } catch (error) {
+        if (jobRunRevision !== runRevision) {
+          return;
+        }
+
+        const errorMessage = error instanceof Error ? error.message : "Media job failed.";
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.data.kind === "realesrganUpscale"
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    status: "failed",
+                    params: { ...node.data.params, errorMessage },
+                  },
+                }
+              : node,
+          ),
+          job: {
+            id: jobId,
+            status: "failed",
+            progress: 0,
+            errorMessage,
+          },
+        }));
+      }
     },
     deleteSelection: () =>
       set((state) => {

@@ -36,6 +36,7 @@ export type WorkflowAssetKind = "image" | "video";
 
 export type WorkflowAssetMetadata = {
   id: string;
+  assetId?: string;
   kind: WorkflowAssetKind;
   fileName: string;
   mimeType: string;
@@ -63,6 +64,8 @@ export type WorkflowJobState = {
   status: WorkflowJobStatus;
   progress: number;
   errorMessage?: string;
+  outputId?: string;
+  downloadUrl?: string;
 };
 
 export type WorkflowGraphValidationError = {

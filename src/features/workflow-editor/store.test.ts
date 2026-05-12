@@ -5,6 +5,7 @@ import type { WorkflowAssetMetadata } from "./types";
 
 const imageAsset: WorkflowAssetMetadata = {
   id: "asset-image",
+  assetId: "server-asset-image",
   kind: "image",
   fileName: "source.png",
   mimeType: "image/png",
@@ -18,64 +19,94 @@ function resetStore() {
 
 describe("useWorkflowEditorStore job lifecycle", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     resetStore();
     useWorkflowEditorStore.getState().attachAssetToNode("node-load-image", imageAsset);
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    vi.unstubAllGlobals();
     resetStore();
   });
 
-  test("graph edits cancel scheduled local job updates and clear validation errors", () => {
-    useWorkflowEditorStore.getState().startJob();
+  test("starts real media job and stores output download URL", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          job: {
+            id: "job-real",
+            status: "completed",
+            progress: 100,
+            outputId: "output-real",
+            downloadUrl: "/api/media/outputs/output-real",
+          },
+        }),
+      }),
+    );
 
-    const startedJobId = useWorkflowEditorStore.getState().job.id;
-    expect(startedJobId).toMatch(/^job-/);
-    expect(useWorkflowEditorStore.getState().job.status).toBe("queued");
+    await useWorkflowEditorStore.getState().startJob();
 
-    useWorkflowEditorStore.getState().onNodesChange([
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/media/jobs",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(useWorkflowEditorStore.getState().job).toEqual({
+      id: "job-real",
+      status: "completed",
+      progress: 100,
+      errorMessage: null,
+      outputId: "output-real",
+      downloadUrl: "/api/media/outputs/output-real",
+    });
+    expect(
+      useWorkflowEditorStore
+        .getState()
+        .nodes.filter((node) => ["loadImage", "realesrganUpscale", "exportFile"].includes(node.data.kind))
+        .every((node) => node.data.status === "completed"),
+    ).toBe(true);
+  });
+
+  test("requires server-uploaded asset before starting job", async () => {
+    useWorkflowEditorStore.getState().attachAssetToNode("node-load-image", {
+      ...imageAsset,
+      assetId: undefined,
+    });
+
+    await useWorkflowEditorStore.getState().startJob();
+
+    expect(useWorkflowEditorStore.getState().job.status).toBe("failed");
+    expect(useWorkflowEditorStore.getState().graphValidationErrors).toEqual([
       {
-        id: "node-load-image",
-        type: "select",
-        selected: true,
+        nodeId: "node-load-image",
+        message: "Load Image needs a server-uploaded asset before starting a job.",
       },
     ]);
-
-    expect(useWorkflowEditorStore.getState().job).toEqual({
-      id: null,
-      status: "idle",
-      progress: 0,
-      errorMessage: null,
-    });
-    expect(useWorkflowEditorStore.getState().graphValidationErrors).toEqual([]);
-
-    vi.advanceTimersByTime(10_000);
-
-    expect(useWorkflowEditorStore.getState().job).toEqual({
-      id: null,
-      status: "idle",
-      progress: 0,
-      errorMessage: null,
-    });
-    expect(useWorkflowEditorStore.getState().nodes.every((node) => node.data.status === "idle")).toBe(true);
   });
 
-  test("job ids include suffix beyond Date.now timestamp", () => {
-    vi.setSystemTime(1_700_000_000_000);
+  test("marks RealESRGAN node failed when media job fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({
+          job: {
+            id: "job-failed",
+            status: "failed",
+            progress: 0,
+            errorMessage: "RealESRGAN dependencies are missing.",
+          },
+        }),
+      }),
+    );
 
-    useWorkflowEditorStore.getState().startJob();
-    const firstJobId = useWorkflowEditorStore.getState().job.id;
+    await useWorkflowEditorStore.getState().startJob();
 
-    resetStore();
-    useWorkflowEditorStore.getState().attachAssetToNode("node-load-image", imageAsset);
-    useWorkflowEditorStore.getState().startJob();
-    const secondJobId = useWorkflowEditorStore.getState().job.id;
-
-    expect(firstJobId).toMatch(/^job-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/);
-    expect(secondJobId).toMatch(/^job-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$/);
-    expect(secondJobId).not.toBe(firstJobId);
+    const upscale = useWorkflowEditorStore
+      .getState()
+      .nodes.find((node) => node.data.kind === "realesrganUpscale");
+    expect(useWorkflowEditorStore.getState().job.status).toBe("failed");
+    expect(upscale?.data.status).toBe("failed");
+    expect(upscale?.data.params.errorMessage).toBe("RealESRGAN dependencies are missing.");
   });
 });
