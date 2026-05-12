@@ -9,6 +9,8 @@ const nodes: WorkflowNode[] = [
   createWorkflowNode("extractFrames", "extract-frames", { x: 0, y: 100 }),
   createWorkflowNode("loadImage", "load-image", { x: 0, y: 200 }),
   createWorkflowNode("combineFrames", "combine-frames", { x: 0, y: 300 }),
+  createWorkflowNode("realesrganUpscale", "upscale", { x: 0, y: 400 }),
+  createWorkflowNode("exportFile", "export", { x: 0, y: 500 }),
 ];
 
 describe("validateWorkflowConnection", () => {
@@ -20,6 +22,26 @@ describe("validateWorkflowConnection", () => {
         [],
       ),
     ).toEqual({ valid: true });
+  });
+
+  it.each([
+    ["load-video", "extract-frames"],
+    ["extract-frames", "upscale"],
+    ["upscale", "combine-frames"],
+    ["combine-frames", "export"],
+  ])("accepts required video-first chain edge %s -> %s", (source, target) => {
+    expect(validateWorkflowConnection({ source, target }, nodes, [])).toEqual({
+      valid: true,
+    });
+  });
+
+  it.each([
+    ["load-image", "upscale"],
+    ["upscale", "export"],
+  ])("accepts image upscale path edge %s -> %s", (source, target) => {
+    expect(validateWorkflowConnection({ source, target }, nodes, [])).toEqual({
+      valid: true,
+    });
   });
 
   it("rejects incompatible source and target data types", () => {
